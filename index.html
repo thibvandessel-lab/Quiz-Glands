@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golf Feud</title>
+<style>
+  :root{
+    --board-green:#0b3d2e;
+    --board-green-dark:#082a20;
+    --gold:#d4af37;
+    --gold-bright:#f2cf5b;
+    --cream:#f6f1e4;
+    --red:#b3312c;
+    --blue-team:#2b6ca3;
+    --orange-team:#c9762a;
+    --font-display:'Georgia', 'Times New Roman', serif;
+    --font-ui:'Helvetica Neue', Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--board-green-dark);
+    color:var(--cream);
+    font-family:var(--font-ui);
+    overflow-x:hidden;
+  }
+  #app{min-height:100vh; display:flex; flex-direction:column;}
+
+  /* ---------- Role picker ---------- */
+  .role-picker{
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:28px; padding:32px; text-align:center;
+    background:radial-gradient(ellipse at top, var(--board-green) 0%, var(--board-green-dark) 70%);
+  }
+  .role-picker h1{
+    font-family:var(--font-display); font-size:clamp(32px,6vw,56px); margin:0;
+    color:var(--gold-bright); letter-spacing:0.5px;
+  }
+  .role-picker p{color:#cfe3d8; max-width:520px; line-height:1.5; margin:0 0 8px;}
+  .role-grid{display:grid; grid-template-columns:repeat(2,minmax(160px,220px)); gap:16px;}
+  .role-btn{
+    background:var(--board-green); border:2px solid var(--gold); color:var(--cream);
+    border-radius:10px; padding:22px 14px; font-size:17px; font-weight:600; cursor:pointer;
+    transition:transform .12s ease, background .12s ease;
+  }
+  .role-btn:hover{background:#0f4c38; transform:translateY(-2px);}
+  .role-btn small{display:block; font-weight:400; font-size:12.5px; color:#bcd3c6; margin-top:6px;}
+
+  /* ---------- Shared board pieces ---------- */
+  .board-wrap{flex:1; display:flex; flex-direction:column; align-items:center; padding:24px; gap:18px;}
+  .scoreboard{
+    display:flex; gap:24px; align-items:center; justify-content:center; margin-top:auto;
+  }
+  .team-score{
+    background:var(--board-green); border:2px solid var(--gold); border-radius:10px;
+    padding:10px 26px; text-align:center; min-width:140px;
+  }
+  .team-score .name{font-size:14px; letter-spacing:1px; color:var(--gold-bright);}
+  .team-score .pts{font-family:var(--font-display); font-size:34px; color:var(--cream);}
+  .team-score.leading{box-shadow:0 0 0 3px var(--gold-bright);}
+
+  .answer-grid{
+    display:grid; gap:10px; width:100%; max-width:900px;
+  }
+  .answer-row{
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--board-green); border:2px solid var(--gold); border-radius:8px;
+    padding:14px 22px; font-size:clamp(16px,2.4vw,24px); min-height:56px;
+  }
+  .answer-row.blank{color:transparent; background:repeating-linear-gradient(135deg,var(--board-green),var(--board-green) 10px,#0e4433 10px,#0e4433 20px);}
+  .answer-row .num{color:var(--gold); font-weight:700; margin-right:14px;}
+  .answer-row .pts{font-family:var(--font-display); font-weight:700; color:var(--gold-bright); font-size:0.9em;}
+  .strikes{display:flex; gap:10px; justify-content:center;}
+  .strike-x{
+    width:52px; height:52px; border-radius:50%; border:3px solid var(--red);
+    display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:900; color:var(--red);
+    opacity:0.15;
+  }
+  .strike-x.active{opacity:1; background:rgba(179,49,44,0.15);}
+
+  .round-tag{font-size:14px; letter-spacing:2px; color:var(--gold-bright); text-transform:uppercase;}
+  .q-title{font-family:var(--font-display); font-size:clamp(22px,3.4vw,34px); text-align:center; max-width:900px;}
+  .q-count{color:#bcd3c6; font-size:15px;}
+
+  .buzz-flash{
+    text-align:center; padding:40px; border-radius:16px; margin:20px 0;
+  }
+  .buzz-flash h2{font-family:var(--font-display); font-size:clamp(28px,5vw,48px); margin:0 0 10px;}
+  .countdown-num{font-family:var(--font-display); font-size:clamp(60px,10vw,110px); color:var(--gold-bright);}
+
+  .btn{
+    background:var(--gold); color:#1a2a20; border:none; border-radius:8px;
+    padding:12px 20px; font-weight:700; font-size:15px; cursor:pointer; font-family:var(--font-ui);
+  }
+  .btn:hover{background:var(--gold-bright);}
+  .btn.secondary{background:transparent; border:2px solid var(--gold); color:var(--gold-bright);}
+  .btn.danger{background:var(--red); color:var(--cream);}
+  .btn:disabled{opacity:0.35; cursor:not-allowed;}
+  .btn.small{padding:8px 12px; font-size:13px;}
+
+  /* ---------- Presenter ---------- */
+  .presenter{padding:20px; max-width:960px; margin:0 auto; width:100%;}
+  .presenter h2{font-family:var(--font-display); color:var(--gold-bright); margin-top:0;}
+  .p-section{background:#0e2e22; border:1px solid #1c5940; border-radius:10px; padding:18px; margin-bottom:16px;}
+  .p-answers-list{display:flex; flex-direction:column; gap:8px; margin:12px 0;}
+  .p-answer-btn{
+    display:flex; justify-content:space-between; align-items:center;
+    background:#123a2a; border:1px solid #2a6b4d; border-radius:8px; padding:10px 14px;
+    color:var(--cream); cursor:pointer; font-size:15px;
+  }
+  .p-answer-btn:hover{background:#175038;}
+  .p-answer-btn.done{opacity:0.35; cursor:default; text-decoration:line-through;}
+  .p-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+  .team-choice-btn{flex:1; min-width:140px; padding:16px; font-size:16px;}
+  .team-choice-btn.A{background:var(--blue-team); color:#fff;}
+  .team-choice-btn.B{background:var(--orange-team); color:#fff;}
+  select{background:#123a2a; color:var(--cream); border:1px solid #2a6b4d; border-radius:6px; padding:8px; font-size:14px; width:100%;}
+  .final-entry-row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:center; margin-bottom:10px;}
+  .muted{color:#9db9ac; font-size:13px;}
+
+  /* ---------- Team buzzer ---------- */
+  .team-view{
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:20px;
+  }
+  .team-view.A{background:radial-gradient(circle at center, #1a4a6e, #0c2438);}
+  .team-view.B{background:radial-gradient(circle at center, #6e4014, #2e1a08);}
+  .buzz-button{
+    width:min(70vw,320px); height:min(70vw,320px); border-radius:50%;
+    border:6px solid var(--cream); background:var(--red); color:var(--cream);
+    font-family:var(--font-display); font-size:clamp(28px,7vw,44px); font-weight:900;
+    cursor:pointer; box-shadow:0 8px 0 #7a1f1c;
+  }
+  .buzz-button:active{transform:translateY(6px); box-shadow:none;}
+  .buzz-button:disabled{opacity:0.3; box-shadow:none;}
+  .team-status{font-size:20px; text-align:center; max-width:340px;}
+
+  .intro-screen{text-align:center; padding:40px;}
+  .intro-screen h1{font-family:var(--font-display); font-size:clamp(38px,7vw,72px); color:var(--gold-bright); margin-bottom:6px;}
+  .intro-screen .sub{font-size:18px; color:#cfe3d8; margin-bottom:26px;}
+  .prize-box{background:var(--board-green); border:2px solid var(--gold); border-radius:14px; padding:24px 32px; display:inline-block; max-width:600px;}
+
+  .confetti-piece{position:fixed; top:-20px; width:10px; height:16px; opacity:0.9; z-index:999; animation:fall linear forwards;}
+  @keyframes fall{ to { transform:translateY(105vh) rotate(360deg); opacity:1; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ============================= DATA ============================= */
+const ROUNDS = [
+  { name:"Round 1", multiplier:1, questions:[
+    { text:"What does a golf player have in their pocket throughout the round?",
+      answers:[
+        {t:"A spare \u201cjust-in-case\u201d golf ball", p:38},
+        {t:"A tee", p:24},
+        {t:"An iconic golf ball marker", p:15},
+        {t:"A pitching fork (divot tool)", p:13},
+        {t:"An mvapp\u00e9", p:10},
+      ]},
+    { text:"Who were the last 5 winners of a Major Championship in golf?",
+      answers:[
+        {t:"Ryan Fox \u2014 2026 Open Championship", p:30},
+        {t:"Wyndham Clark \u2014 2026 U.S. Open", p:25},
+        {t:"Aaron Rai \u2014 2026 PGA Championship", p:20},
+        {t:"Rory McIlroy \u2014 2026 Masters", p:15},
+        {t:"Scottie Scheffler \u2014 2025 Open Championship", p:10},
+      ]},
+    { text:"Name one of the top 5 highest-earning golfers in history (career PGA Tour prize money).",
+      answers:[
+        {t:"Scottie Scheffler \u2014 $130.4M", p:30},
+        {t:"Tiger Woods \u2014 $121.0M", p:25},
+        {t:"Rory McIlroy \u2014 $119.6M", p:20},
+        {t:"Phil Mickelson \u2014 $96.7M", p:15},
+        {t:"Justin Rose \u2014 $79.4M", p:10},
+      ]},
+    { text:"Name one of the 5 most popular golf YouTube channels.",
+      answers:[
+        {t:"Rick Shiels Golf", p:30},
+        {t:"Bryson DeChambeau", p:25},
+        {t:"Good Good", p:20},
+        {t:"Grant Horvat Golf", p:15},
+        {t:"Danny Maude", p:10},
+      ]},
+    { text:"What are the most popular doubles/team formats in golf? Name one of the top 5.",
+      answers:[
+        {t:"Scramble", p:32},
+        {t:"Best Ball / Fourball", p:24},
+        {t:"Foursomes / Alternate Shot", p:18},
+        {t:"Shamble", p:14},
+        {t:"Chapman / Pinehurst", p:12},
+      ]},
+  ]},
+  { name:"Round 2", multiplier:2, questions:[
+    { text:"Name a famous golf course that hosts a Major or has major prestige.",
+      answers:[
+        {t:"Augusta National", p:34},
+        {t:"St Andrews (Old Course)", p:26},
+        {t:"Pebble Beach", p:18},
+        {t:"Pinehurst No. 2", p:12},
+        {t:"Royal Troon / Royal St George's", p:10},
+      ]},
+    { text:"Name something a golfer does as pre-shot routine.",
+      answers:[
+        {t:"Practice swing", p:30},
+        {t:"Line up the putt / read the green", p:24},
+        {t:"Check the wind", p:22},
+        {t:"Waggle the club", p:14},
+        {t:"Take a divot test", p:10},
+      ]},
+    { text:"Name a reason a golfer might get a penalty stroke.",
+      answers:[
+        {t:"Ball in water hazard", p:30},
+        {t:"Out of bounds", p:28},
+        {t:"Lost ball", p:20},
+        {t:"Unplayable lie", p:12},
+        {t:"Slow play", p:10},
+      ]},
+    { text:"Name a nickname of a famous golfer.",
+      answers:[
+        {t:"\u201cThe Golden Bear\u201d (Jack Nicklaus)", p:30},
+        {t:"\u201cTiger\u201d (Eldrick Woods)", p:26},
+        {t:"\u201cThe King\u201d (Arnold Palmer)", p:20},
+        {t:"\u201cThe Shark\u201d (Greg Norman)", p:14},
+        {t:"\u201cRors\u201d / \u201cRory\u201d (McIlroy)", p:10},
+      ]},
+    { text:"According to the Rules of Golf, name a situation where a player gets free relief (no penalty).",
+      answers:[
+        {t:"Ground under repair (GUR)", p:28},
+        {t:"Immovable obstruction (cart path, sprinkler head)", p:26},
+        {t:"Temporary water / casual water", p:22},
+        {t:"Embedded ball (own pitch-mark)", p:16},
+        {t:"Ball on the wrong green", p:8},
+      ]},
+  ]},
+  { name:"Round 3", multiplier:3, questions:[
+    { text:"What are the 5 cheapest golf ball brands?",
+      answers:[
+        {t:"Nitro", p:32},
+        {t:"Wilson", p:24},
+        {t:"Kirkland Signature", p:20},
+        {t:"Callaway", p:14},
+        {t:"Srixon", p:10},
+      ]},
+    { text:"Name something a caddie is responsible for.",
+      answers:[
+        {t:"Carrying the bag/clubs", p:30},
+        {t:"Reading greens/lines", p:24},
+        {t:"Giving yardages/club advice", p:22},
+        {t:"Keeping the player calm / mental support", p:14},
+        {t:"Raking bunkers", p:10},
+      ]},
+    { text:"\ud83c\udfa5 Video cue: Jean van de Velde, final hole, 1999 Open. Name something that went wrong for him.",
+      answers:[
+        {t:"Ball went into the water / Barry Burn", p:28},
+        {t:"Took his shoes and socks off", p:26},
+        {t:"Ended up in a bunker", p:20},
+        {t:"Made triple bogey, lost in playoff", p:18},
+        {t:"Wild tee shot into stands/rough", p:8},
+      ]},
+    { text:"Name a golfer who has won all four career Majors (\u201cCareer Grand Slam\u201d).",
+      answers:[
+        {t:"Jack Nicklaus", p:20},
+        {t:"Tiger Woods", p:20},
+        {t:"Gary Player", p:16},
+        {t:"Rory McIlroy", p:16},
+        {t:"Ben Hogan", p:14},
+        {t:"Gene Sarazen", p:8},
+        {t:"Sam Snead / Arnold Palmer", p:6},
+      ]},
+    { text:"Which players have made the most Ryder Cup appearances for Team Europe?",
+      answers:[
+        {t:"Nick Faldo \u2014 11", p:26},
+        {t:"Lee Westwood \u2014 11", p:26},
+        {t:"Sergio Garc\u00eda \u2014 10", p:16},
+        {t:"Bernhard Langer \u2014 10", p:16},
+        {t:"Christy O'Connor Snr \u2014 10", p:16},
+      ]},
+  ]},
+];
+
+const FINAL = [
+  { text:"Name something you associate with tomorrow's course, Samanah Golf Course in Marrakech.",
+    answers:[
+      {t:"Designed by Jack Nicklaus / Nicklaus Design", p:30},
+      {t:"Mandatory caddy", p:25},
+      {t:"Backdrop of the Atlas Mountains", p:20},
+      {t:"First course in Africa to host a PGA Tour Champions event", p:15},
+      {t:"Par-72 championship layout, opened in 2009", p:10},
+    ]},
+  { text:"Name something a golfer might blame for a bad shot (besides themselves).",
+    answers:[
+      {t:"The wind", p:25},
+      {t:"A bad lie/bounce", p:22},
+      {t:"Someone moving or talking mid-swing", p:20},
+      {t:"Glare/sun in the eyes", p:18},
+      {t:"Faulty equipment/clubs", p:15},
+    ]},
+  { text:"Name something that's part of the Masters' unique traditions (besides the green jacket).",
+    answers:[
+      {t:"Champions Dinner", p:25},
+      {t:"Amen Corner (holes 11\u201313)", p:25},
+      {t:"Pimento cheese sandwiches", p:20},
+      {t:"Azaleas / pristine flowers on course", p:15},
+      {t:"Par-3 Contest the day before", p:15},
+    ]},
+  { text:"Name a superstition or ritual some golfers have before or during a round.",
+    answers:[
+      {t:"Marking the ball with a lucky coin/marker", p:25},
+      {t:"Never stepping on another player's putting line", p:22},
+      {t:"Wearing the same \u201clucky\u201d item", p:20},
+      {t:"Always teeing off with the same ball number", p:18},
+      {t:"Avoiding certain numbers", p:15},
+    ]},
+  { text:"Name something associated with Tiger Woods' career besides winning majors.",
+    answers:[
+      {t:"2021 car crash and recovery", p:25},
+      {t:"2009 personal scandal / comeback story", p:20},
+      {t:"Red shirt on Sundays", p:20},
+      {t:"Youngest Masters winner in 1997 (age 21)", p:20},
+      {t:"Longest reign as World No. 1", p:15},
+    ]},
+];
+
+/* ============================= STATE ============================= */
+const STORAGE_KEY = "golf_feud_state_v1";
+
+function defaultState(){
+  return {
+    phase:"intro",          // intro | playing | roundEnd | final | gameEnd
+    roundIndex:0,
+    questionIndex:0,
+    qPhase:"hidden",        // hidden | buzzed | playing | steal | qdone
+    buzzTeam:null,
+    buzzTime:null,
+    revealed:[],
+    strikes:0,
+    controllingTeam:null,
+    awardedTeam:null,
+    pointsThisQ:0,
+    scores:{A:0,B:0},
+    finalPhase:"idle",      // idle | timer | entry | reveal | done
+    finalTimerEnd:null,
+    finalTeam:null,
+    finalAnswers:{},        // {qIdx:{p1:idx|null,p2:idx|null}}
+    finalRevealStep:0,      // 0..9
+    finalTotal:0,
+    updatedAt:Date.now()
+  };
+}
+
+let state = defaultState();
+let myRole = null; // 'tv' | 'presenter' | 'A' | 'B'
+
+async function loadState(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, true);
+    if(res && res.value){ state = JSON.parse(res.value); }
+  }catch(e){
+    // not found yet -> push default
+    await saveState(state);
+  }
+}
+async function saveState(s){
+  s.updatedAt = Date.now();
+  state = s;
+  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(s), true); }
+  catch(e){ console.error("storage set failed", e); }
+}
+
+/* ============================= HELPERS ============================= */
+function currentRound(){ return ROUNDS[state.roundIndex]; }
+function currentQuestion(){ return currentRound() ? currentRound().questions[state.questionIndex] : null; }
+function opposite(team){ return team === "A" ? "B" : "A"; }
+function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+
+/* ============================= ACTIONS (presenter) ============================= */
+async function startGame(){
+  const s = defaultState();
+  s.phase = "playing";
+  await saveState(s);
+}
+function resetQFlags(s){
+  s.qPhase="hidden"; s.buzzTeam=null; s.buzzTime=null; s.revealed=[];
+  s.strikes=0; s.controllingTeam=null; s.awardedTeam=null; s.pointsThisQ=0;
+}
+async function nextQuestion(){
+  const s = {...state};
+  const round = ROUNDS[s.roundIndex];
+  if(s.questionIndex < round.questions.length-1){
+    s.questionIndex++;
+    resetQFlags(s);
+    await saveState(s);
+  } else {
+    s.phase = "roundEnd";
+    await saveState(s);
+  }
+}
+async function startNextRound(){
+  const s = {...state};
+  if(s.roundIndex < ROUNDS.length-1){
+    s.roundIndex++; s.questionIndex=0; s.phase="playing";
+    resetQFlags(s);
+    await saveState(s);
+  } else {
+    s.phase = "final";
+    s.finalTeam = s.scores.A >= s.scores.B ? "A" : "B";
+    await saveState(s);
+  }
+}
+async function markCorrectInitial(idx){
+  const s = {...state};
+  const mult = ROUNDS[s.roundIndex].multiplier;
+  const ans = currentQuestion().answers[idx];
+  s.revealed.push(idx);
+  s.pointsThisQ += ans.p * mult;
+  s.controllingTeam = s.buzzTeam;
+  s.qPhase = "playing";
+  s.buzzTeam = null; s.buzzTime = null;
+  if(s.revealed.length === currentQuestion().answers.length){
+    s.awardedTeam = s.controllingTeam;
+    s.scores[s.awardedTeam] += s.pointsThisQ;
+    s.qPhase = "qdone";
+  }
+  await saveState(s);
+}
+async function markWrongInitial(){
+  const s = {...state};
+  s.controllingTeam = opposite(s.buzzTeam);
+  s.qPhase = "playing";
+  s.strikes = 0;
+  s.buzzTeam = null; s.buzzTime = null;
+  await saveState(s);
+}
+async function markCorrectPlaying(idx){
+  const s = {...state};
+  const mult = ROUNDS[s.roundIndex].multiplier;
+  const ans = currentQuestion().answers[idx];
+  s.revealed.push(idx);
+  s.pointsThisQ += ans.p * mult;
+  if(s.revealed.length === currentQuestion().answers.length){
+    s.awardedTeam = s.controllingTeam;
+    s.scores[s.awardedTeam] += s.pointsThisQ;
+    s.qPhase = "qdone";
+  }
+  await saveState(s);
+}
+async function markWrongPlaying(){
+  const s = {...state};
+  s.strikes++;
+  if(s.strikes >= 3){ s.qPhase = "steal"; }
+  await saveState(s);
+}
+async function stealCorrect(idx){
+  const s = {...state};
+  const mult = ROUNDS[s.roundIndex].multiplier;
+  const ans = currentQuestion().answers[idx];
+  s.revealed.push(idx);
+  s.pointsThisQ += ans.p * mult;
+  s.awardedTeam = opposite(s.controllingTeam);
+  s.scores[s.awardedTeam] += s.pointsThisQ;
+  s.qPhase = "qdone";
+  await saveState(s);
+}
+async function stealFailed(){
+  const s = {...state};
+  s.awardedTeam = s.controllingTeam;
+  s.scores[s.awardedTeam] += s.pointsThisQ;
+  s.qPhase = "qdone";
+  await saveState(s);
+}
+async function reassignPoints(team){
+  const s = {...state};
+  if(s.awardedTeam){ s.scores[s.awardedTeam] -= s.pointsThisQ; }
+  s.awardedTeam = team;
+  s.scores[team] += s.pointsThisQ;
+  await saveState(s);
+}
+async function startFinalTimer(){
+  const s = {...state};
+  s.finalPhase = "timer";
+  s.finalTimerEnd = Date.now() + 60000;
+  await saveState(s);
+}
+async function goToEntry(){
+  const s = {...state};
+  s.finalPhase = "entry";
+  await saveState(s);
+}
+function setFinalAnswer(qIdx, player, ansIdx){
+  if(!state.finalAnswers[qIdx]) state.finalAnswers[qIdx] = {p1:null,p2:null};
+  state.finalAnswers[qIdx][player] = ansIdx;
+}
+async function saveFinalEntries(){
+  await saveState({...state});
+}
+async function startReveal(){
+  const s = {...state};
+  s.finalPhase = "reveal";
+  s.finalRevealStep = 0;
+  s.finalTotal = 0;
+  await saveState(s);
+}
+function revealSlots(){
+  // 10 slots: q0p1, q0p2, q1p1, q1p2 ...
+  const slots = [];
+  for(let q=0;q<FINAL.length;q++){
+    slots.push({q, player:"p1"});
+    slots.push({q, player:"p2"});
+  }
+  return slots;
+}
+async function revealNext(){
+  const s = {...state};
+  const slots = revealSlots();
+  const slot = slots[s.finalRevealStep];
+  if(slot){
+    const entry = s.finalAnswers[slot.q];
+    const ansIdx = entry ? entry[slot.player] : null;
+    if(ansIdx !== null && ansIdx !== undefined){
+      s.finalTotal += FINAL[slot.q].answers[ansIdx].p;
+    }
+    s.finalRevealStep++;
+  }
+  if(s.finalRevealStep >= slots.length){ s.finalPhase = "done"; }
+  await saveState(s);
+}
+async function resetGame(){
+  if(!confirm("Reset the whole game? This clears all scores.")) return;
+  await saveState(defaultState());
+}
+
+/* ============================= RENDER: ROLE PICKER ============================= */
+function renderRolePicker(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <div class="role-picker">
+      <h1>Golf Feud</h1>
+      <p>Pick what this device is for. The TV goes on the shared screen, the Presenter console stays with the host, and each team opens their own Buzzer on one phone.</p>
+      <div class="role-grid">
+        <button class="role-btn" data-role="tv">TV Display<small>Big screen, both teams watch</small></button>
+        <button class="role-btn" data-role="presenter">Presenter Console<small>Host controls the game</small></button>
+        <button class="role-btn" data-role="A">Team A Buzzer<small>One phone for Team A</small></button>
+        <button class="role-btn" data-role="B">Team B Buzzer<small>One phone for Team B</small></button>
+      </div>
+    </div>`;
+  app.querySelectorAll(".role-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      myRole = btn.dataset.role;
+      startLoop();
+    });
+  });
+}
+
+/* ============================= RENDER: TV ============================= */
+function renderTV(){
+  const app = document.getElementById("app");
+  let html = `<div class="board-wrap">`;
+
+  if(state.phase === "intro"){
+    html += `
+      <div class="intro-screen">
+        <h1>\u26f3 Golf Feud</h1>
+        <div class="sub">2 teams of 5 &middot; 3 rounds &middot; Fast Money final</div>
+        <div class="prize-box">
+          <div style="font-size:15px;letter-spacing:1px;color:#bcd3c6;margin-bottom:8px;">TODAY'S PRIZE</div>
+          <div style="font-family:Georgia,serif;font-size:28px;color:var(--gold-bright);">Bragging rights + a round at Samanah Golf Course</div>
+        </div>
+      </div>`;
+  }
+  else if(state.phase === "playing" || state.phase==="roundEnd"){
+    if(state.phase === "roundEnd"){
+      html += `<div class="round-tag">${esc(currentRound().name)} complete</div>
+        <div class="q-title">Scoreboard</div>` + scoreboardHTML();
+    } else {
+      const round = currentRound(); const q = currentQuestion();
+      html += `<div class="round-tag">${esc(round.name)} &middot; Question ${state.questionIndex+1} of ${round.questions.length}</div>`;
+
+      if(state.qPhase === "hidden"){
+        html += `<div class="q-title">Host is asking the question&hellip;</div>
+          <div class="q-count">${q.answers.length} answers on the board</div>`;
+        html += blankGridHTML(q.answers.length);
+      } else if(state.qPhase === "buzzed"){
+        const teamColor = state.buzzTeam==="A" ? "var(--blue-team)" : "var(--orange-team)";
+        html += `<div class="buzz-flash" style="background:${teamColor}">
+          <h2>TEAM ${state.buzzTeam} BUZZED!</h2>
+          <div class="countdown-num" id="countdownNum">5</div>
+        </div>`;
+        html += `<div class="q-title">${esc(q.text)}</div>`;
+        html += answerGridHTML(q);
+      } else {
+        html += `<div class="q-title">${esc(q.text)}</div>`;
+        if(state.qPhase==="playing" || state.qPhase==="steal" || state.qPhase==="qdone"){
+          const label = state.qPhase==="steal" ? `Team ${opposite(state.controllingTeam)} can steal!` :
+                        state.qPhase==="qdone" ? `Team ${state.awardedTeam} wins ${state.pointsThisQ} points!` :
+                        `Team ${state.controllingTeam} is answering`;
+          html += `<div style="font-size:18px;color:var(--gold-bright);">${label}</div>`;
+        }
+        html += answerGridHTML(q);
+        html += `<div class="strikes">${strikeHTML()}</div>`;
+      }
+    }
+    html += scoreboardHTML();
+  }
+  else if(state.phase === "final"){
+    html += renderFinalTV();
+  }
+  else if(state.phase === "gameEnd"){
+    const winner = state.scores.A === state.scores.B ? "It's a tie!" :
+      (state.scores.A > state.scores.B ? "Team A wins!" : "Team B wins!");
+    html += `<div class="intro-screen"><h1>${esc(winner)}</h1></div>`;
+    html += scoreboardHTML();
+  }
+
+  html += `</div>`;
+  app.innerHTML = html;
+
+  if(state.qPhase === "buzzed" && state.buzzTime){
+    tickCountdown();
+  }
+}
+function scoreboardHTML(){
+  const aLead = state.scores.A > state.scores.B;
+  const bLead = state.scores.B > state.scores.A;
+  return `<div class="scoreboard">
+    <div class="team-score ${aLead?'leading':''}"><div class="name">TEAM A</div><div class="pts">${state.scores.A}</div></div>
+    <div class="team-score ${bLead?'leading':''}"><div class="name">TEAM B</div><div class="pts">${state.scores.B}</div></div>
+  </div>`;
+}
+function blankGridHTML(n){
+  let html = `<div class="answer-grid">`;
+  for(let i=0;i<n;i++){
+    html += `<div class="answer-row blank"><span>&nbsp;</span></div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+function answerGridHTML(q){
+  let html = `<div class="answer-grid">`;
+  q.answers.forEach((a,i)=>{
+    if(state.revealed.includes(i)){
+      html += `<div class="answer-row"><span><span class="num">${i+1}</span>${esc(a.t)}</span><span class="pts">${a.p * ROUNDS[state.roundIndex].multiplier}</span></div>`;
+    } else {
+      html += `<div class="answer-row blank"><span>&nbsp;</span></div>`;
+    }
+  });
+  html += `</div>`;
+  return html;
+}
+function strikeHTML(){
+  let html = "";
+  for(let i=0;i<3;i++){
+    html += `<div class="strike-x ${i < state.strikes ? 'active':''}">${i < state.strikes ? '\u2715':''}</div>`;
+  }
+  return html;
+}
+function tickCountdown(){
+  const el = document.getElementById("countdownNum");
+  if(!el) return;
+  const update = ()=>{
+    const remain = Math.max(0, 5 - Math.floor((Date.now()-state.buzzTime)/1000));
+    const e = document.getElementById("countdownNum");
+    if(e) e.textContent = remain;
+  };
+  update();
+  const iv = setInterval(()=>{
+    if(myRole!=="tv" || state.qPhase!=="buzzed"){ clearInterval(iv); return; }
+    update();
+  }, 250);
+}
+
+function renderFinalTV(){
+  let html = `<div class="round-tag">Fast Money Final \u2014 Team ${state.finalTeam}</div>`;
+  if(state.finalPhase === "idle" || state.finalPhase==="timer"){
+    if(state.finalPhase==="timer"){
+      html += `<div class="countdown-num" id="finalCountdown">60</div>`;
+    } else {
+      html += `<div class="q-title">Get ready&hellip;</div>`;
+    }
+    html += `<div class="answer-grid">`;
+    FINAL.forEach((q,i)=>{ html += `<div class="answer-row"><span><span class="num">${i+1}</span>${esc(q.text)}</span></div>`; });
+    html += `</div>`;
+  } else if(state.finalPhase === "entry"){
+    html += `<div class="q-title">Host is entering the answers&hellip;</div>`;
+  } else if(state.finalPhase === "reveal" || state.finalPhase === "done"){
+    const slots = revealSlots();
+    html += `<div class="answer-grid">`;
+    slots.forEach((slot,i)=>{
+      const revealed = i < state.finalRevealStep;
+      const entry = state.finalAnswers[slot.q];
+      const ansIdx = entry ? entry[slot.player] : null;
+      const q = FINAL[slot.q];
+      const label = `Q${slot.q+1} \u2014 ${slot.player==="p1"?"Player 1":"Player 2"}`;
+      if(revealed){
+        const txt = (ansIdx!==null && ansIdx!==undefined) ? q.answers[ansIdx].t : "No match";
+        const pts = (ansIdx!==null && ansIdx!==undefined) ? q.answers[ansIdx].p : 0;
+        html += `<div class="answer-row"><span>${label}: ${esc(txt)}</span><span class="pts">${pts}</span></div>`;
+      } else {
+        html += `<div class="answer-row blank"><span>${label}</span></div>`;
+      }
+    });
+    html += `</div>`;
+    html += `<div class="q-title">Total: ${state.finalTotal}</div>`;
+    if(state.finalPhase==="done" && state.finalTotal > 200){
+      html += `<div class="q-title" style="color:var(--gold-bright);">\ud83c\udfc6 OVER 200 \u2014 CELEBRATION! \ud83c\udfc6</div>`;
+      launchConfetti();
+    }
+  }
+  return html;
+}
+
+let confettiLaunched = false;
+function launchConfetti(){
+  if(confettiLaunched) return;
+  confettiLaunched = true;
+  const colors = ["#d4af37","#f2cf5b","#0b3d2e","#b3312c","#2b6ca3"];
+  for(let i=0;i<80;i++){
+    const el = document.createElement("div");
+    el.className = "confetti-piece";
+    el.style.left = Math.random()*100 + "vw";
+    el.style.background = colors[Math.floor(Math.random()*colors.length)];
+    el.style.animationDuration = (2.5 + Math.random()*2) + "s";
+    el.style.animationDelay = (Math.random()*1.5) + "s";
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(), 6000);
+  }
+}
+
+/* ============================= RENDER: PRESENTER ============================= */
+function renderPresenter(){
+  const app = document.getElementById("app");
+  let html = `<div class="presenter"><h2>\u26f3 Presenter Console</h2>`;
+
+  if(state.phase === "intro"){
+    html += `<div class="p-section"><p>Everyone's on the intro screen. Start when ready.</p>
+      <button class="btn" id="startGameBtn">Start Game \u2192 Round 1</button></div>`;
+  }
+  else if(state.phase === "playing"){
+    const round = currentRound(); const q = currentQuestion();
+    html += `<div class="p-section">
+      <div class="muted">${esc(round.name)} (x${round.multiplier}) &middot; Question ${state.questionIndex+1} of ${round.questions.length}</div>
+      <h3 style="margin-top:6px;">${esc(q.text)}</h3>`;
+
+    if(state.qPhase === "hidden"){
+      html += `<p class="muted">Waiting for a team to buzz in on their phone.</p>`;
+    }
+    if(state.qPhase === "buzzed"){
+      html += `<p><strong>Team ${state.buzzTeam} buzzed.</strong> Did they say a correct answer?</p>`;
+      html += `<div class="p-answers-list">`;
+      q.answers.forEach((a,i)=>{
+        html += `<div class="p-answer-btn" data-action="correctInitial" data-idx="${i}">
+          <span>${esc(a.t)}</span><span class="pts">+${a.p*round.multiplier}</span></div>`;
+      });
+      html += `</div>`;
+      html += `<button class="btn danger" data-action="wrongInitial">\u2716 Wrong buzz</button>`;
+    }
+    if(state.qPhase === "playing"){
+      html += `<p><strong>Team ${state.controllingTeam}</strong> is answering. Strikes: ${state.strikes}/3</p>`;
+      html += `<div class="p-answers-list">`;
+      q.answers.forEach((a,i)=>{
+        const done = state.revealed.includes(i);
+        html += `<div class="p-answer-btn ${done?'done':''}" ${done?'':`data-action="correctPlaying" data-idx="${i}"`}>
+          <span>${esc(a.t)}</span><span class="pts">${done?'\u2713':'+'+(a.p*round.multiplier)}</span></div>`;
+      });
+      html += `</div>`;
+      html += `<button class="btn danger" data-action="wrongPlaying">\u2716 Wrong answer (strike)</button>`;
+    }
+    if(state.qPhase === "steal"){
+      html += `<p><strong>Team ${opposite(state.controllingTeam)}</strong> gets ONE steal attempt. Current pot: ${state.pointsThisQ} pts</p>`;
+      html += `<div class="p-answers-list">`;
+      q.answers.forEach((a,i)=>{
+        const done = state.revealed.includes(i);
+        if(!done){
+          html += `<div class="p-answer-btn" data-action="stealCorrect" data-idx="${i}">
+            <span>${esc(a.t)}</span><span class="pts">+${a.p*round.multiplier}</span></div>`;
+        }
+      });
+      html += `</div>`;
+      html += `<button class="btn danger" data-action="stealFailed">\u2716 Steal failed</button>`;
+    }
+    if(state.qPhase === "qdone"){
+      html += `<p><strong>Team ${state.awardedTeam}</strong> was awarded ${state.pointsThisQ} points.</p>`;
+      html += `<div class="p-row">
+        <button class="btn team-choice-btn A small" data-action="reassign" data-team="A">Give points to Team A instead</button>
+        <button class="btn team-choice-btn B small" data-action="reassign" data-team="B">Give points to Team B instead</button>
+      </div>`;
+      const isLastQ = state.questionIndex === round.questions.length-1;
+      html += `<button class="btn" style="margin-top:14px;" data-action="nextQuestion">${isLastQ ? 'Finish round \u2192 Scoreboard':'Next question \u2192'}</button>`;
+    }
+    html += `</div>`;
+  }
+  else if(state.phase === "roundEnd"){
+    html += `<div class="p-section"><p>Round complete. Scores \u2014 A: ${state.scores.A}, B: ${state.scores.B}</p>
+      <button class="btn" data-action="startNextRound">${state.roundIndex < ROUNDS.length-1 ? 'Start next round \u2192' : 'Go to Fast Money Final \u2192'}</button></div>`;
+  }
+  else if(state.phase === "final"){
+    html += renderFinalPresenter();
+  }
+  else if(state.phase === "gameEnd"){
+    html += `<div class="p-section"><p>Game complete! Final: A ${state.scores.A} + Team's Fast Money bonus if applicable.</p></div>`;
+  }
+
+  html += `<div class="p-section"><button class="btn secondary" data-action="resetGame">Reset entire game</button></div>`;
+  html += `</div>`;
+  app.innerHTML = html;
+  bindPresenterEvents();
+}
+
+function renderFinalPresenter(){
+  let html = `<div class="p-section"><p>Fast Money team: <strong>Team ${state.finalTeam}</strong> (led after 3 rounds)</p>`;
+  if(state.finalPhase === "idle"){
+    html += `<button class="btn" data-action="startFinalTimer">Start 60-second timer</button>`;
+  }
+  if(state.finalPhase === "timer"){
+    html += `<p class="muted">Timer running. Both players give their 5 answers verbally \u2014 don't touch anything else. Move on whenever they're done.</p>`;
+    html += `<button class="btn" data-action="goToEntry">Go to answer entry \u2192</button>`;
+  }
+  if(state.finalPhase === "entry"){
+    html += `<p class="muted">Pick the closest match for each answer given (or "No match").</p>`;
+    FINAL.forEach((q,qi)=>{
+      html += `<div style="margin-bottom:14px;"><strong>Q${qi+1}.</strong> ${esc(q.text)}
+        <div class="final-entry-row">
+          <select data-fq="${qi}" data-fp="p1"><option value="">Player 1: no match</option>
+            ${q.answers.map((a,ai)=>`<option value="${ai}" ${state.finalAnswers[qi]&&state.finalAnswers[qi].p1===ai?'selected':''}>${esc(a.t)} (${a.p})</option>`).join("")}
+          </select>
+          <select data-fq="${qi}" data-fp="p2"><option value="">Player 2: no match</option>
+            ${q.answers.map((a,ai)=>`<option value="${ai}" ${state.finalAnswers[qi]&&state.finalAnswers[qi].p2===ai?'selected':''}>${esc(a.t)} (${a.p})</option>`).join("")}
+          </select>
+        </div></div>`;
+    });
+    html += `<button class="btn" data-action="startReveal">Save &amp; start reveal \u2192</button>`;
+  }
+  if(state.finalPhase === "reveal"){
+    const total = revealSlots().length;
+    html += `<p>Revealed ${state.finalRevealStep} of ${total}. Running total: ${state.finalTotal}</p>`;
+    html += `<button class="btn" data-action="revealNext">Reveal next answer</button>`;
+  }
+  if(state.finalPhase === "done"){
+    html += `<p>Final total: <strong>${state.finalTotal}</strong>${state.finalTotal>200 ? ' \u2014 over 200! \ud83c\udfc6':''}</p>
+      <button class="btn" data-action="endGame">Show winner screen</button>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function bindPresenterEvents(){
+  document.getElementById("startGameBtn") && document.getElementById("startGameBtn").addEventListener("click", startGame);
+  document.querySelectorAll("[data-action]").forEach(el=>{
+    el.addEventListener("click", async ()=>{
+      const action = el.dataset.action;
+      const idx = el.dataset.idx !== undefined ? parseInt(el.dataset.idx) : null;
+      if(action==="correctInitial") await markCorrectInitial(idx);
+      else if(action==="wrongInitial") await markWrongInitial();
+      else if(action==="correctPlaying") await markCorrectPlaying(idx);
+      else if(action==="wrongPlaying") await markWrongPlaying();
+      else if(action==="stealCorrect") await stealCorrect(idx);
+      else if(action==="stealFailed") await stealFailed();
+      else if(action==="reassign") await reassignPoints(el.dataset.team);
+      else if(action==="nextQuestion") await nextQuestion();
+      else if(action==="startNextRound") await startNextRound();
+      else if(action==="startFinalTimer") await startFinalTimer();
+      else if(action==="goToEntry") await goToEntry();
+      else if(action==="startReveal") await startReveal();
+      else if(action==="revealNext") await revealNext();
+      else if(action==="resetGame") await resetGame();
+      else if(action==="endGame"){ const s={...state}; s.phase="gameEnd"; await saveState(s); }
+      render();
+    });
+  });
+  document.querySelectorAll("select[data-fq]").forEach(sel=>{
+    sel.addEventListener("change", ()=>{
+      const qi = sel.dataset.fq, p = sel.dataset.fp;
+      const val = sel.value === "" ? null : parseInt(sel.value);
+      setFinalAnswer(qi, p, val);
+    });
+  });
+}
+
+/* ============================= RENDER: TEAM ============================= */
+async function doBuzz(){
+  await loadState();
+  if(state.qPhase !== "hidden" || state.buzzTeam){ return; }
+  const s = {...state};
+  s.qPhase = "buzzed";
+  s.buzzTeam = myRole;
+  s.buzzTime = Date.now();
+  await saveState(s);
+}
+function renderTeam(){
+  const app = document.getElementById("app");
+  const teamName = myRole === "A" ? "Team A" : "Team B";
+  let statusHTML = "";
+  let buzzDisabled = true;
+
+  if(state.phase === "intro"){
+    statusHTML = "Waiting for the host to start the game.";
+  } else if(state.phase === "playing"){
+    if(state.qPhase === "hidden"){
+      statusHTML = "Buzz in when you know an answer!";
+      buzzDisabled = false;
+    } else if(state.qPhase === "buzzed"){
+      statusHTML = state.buzzTeam === myRole ? "You buzzed! Answer now!" : `Team ${state.buzzTeam} buzzed first.`;
+    } else if(state.qPhase === "playing" || state.qPhase === "steal"){
+      const active = (state.qPhase==="playing" && state.controllingTeam===myRole) ||
+                     (state.qPhase==="steal" && opposite(state.controllingTeam)===myRole);
+      statusHTML = active ? "Your team is answering \u2014 talk to the host!" : "Other team is answering.";
+    } else if(state.qPhase === "qdone"){
+      statusHTML = "Question over. Get ready for the next one.";
+    }
+  } else if(state.phase === "roundEnd"){
+    statusHTML = "Round complete! Check the TV for scores.";
+  } else if(state.phase === "final"){
+    statusHTML = state.finalTeam === myRole ? "Your team is playing Fast Money!" : "Watch the other team play Fast Money.";
+  } else if(state.phase === "gameEnd"){
+    statusHTML = "Game over \u2014 thanks for playing!";
+  }
+
+  const app_html = `
+    <div class="team-view ${myRole}">
+      <h2 style="font-family:Georgia,serif;">${teamName}</h2>
+      <button class="buzz-button" id="buzzBtn" ${buzzDisabled?'disabled':''}>BUZZ</button>
+      <div class="team-status">${statusHTML}</div>
+      <div class="scoreboard">
+        <div class="team-score"><div class="name">A</div><div class="pts">${state.scores.A}</div></div>
+        <div class="team-score"><div class="name">B</div><div class="pts">${state.scores.B}</div></div>
+      </div>
+    </div>`;
+  app.innerHTML = app_html;
+  const btn = document.getElementById("buzzBtn");
+  if(btn) btn.addEventListener("click", doBuzz);
+}
+
+/* ============================= MAIN LOOP ============================= */
+function render(){
+  if(myRole === "tv") renderTV();
+  else if(myRole === "presenter") renderPresenter();
+  else if(myRole === "A" || myRole === "B") renderTeam();
+}
+
+let loopStarted = false;
+function startLoop(){
+  if(loopStarted) return;
+  loopStarted = true;
+  render();
+  setInterval(async ()=>{
+    await loadState();
+    render();
+  }, 700);
+}
+
+renderRolePicker();
+</script>
+</body>
+</html>
