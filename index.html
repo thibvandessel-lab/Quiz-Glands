@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Golf Feud</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <style>
   :root{
     --board-green:#0b3d2e;
@@ -323,9 +325,19 @@ const FINAL = [
     ]},
 ];
 
-/* ============================= STATE ============================= */
-const STORAGE_KEY = "golf_feud_state_v1";
+/* ============================= FIREBASE ============================= */
+/* Paste your own project's config here — see the setup guide. Everything
+   under "firebaseConfig" comes straight from the Firebase console. */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC3QuRMNVgxAA0gNBiWHvJUZpvOC9KruXE",
+  authDomain: "glands-quiz-2026.firebaseapp.com",
+  databaseURL: "https://glands-quiz-2026-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "glands-quiz-2026",
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const stateRef = firebase.database().ref("golf_feud_state");
 
+/* ============================= STATE ============================= */
 function defaultState(){
   return {
     phase:"intro",          // intro | playing | roundEnd | final | gameEnd
@@ -353,20 +365,21 @@ function defaultState(){
 let state = defaultState();
 let myRole = null; // 'tv' | 'presenter' | 'A' | 'B'
 
-async function loadState(){
-  try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    if(res && res.value){ state = JSON.parse(res.value); }
-  }catch(e){
-    // not found yet -> push default
-    await saveState(state);
-  }
-}
 async function saveState(s){
   s.updatedAt = Date.now();
   state = s;
-  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(s), true); }
-  catch(e){ console.error("storage set failed", e); }
+  try{ await stateRef.set(s); }
+  catch(e){ console.error("Firebase write failed — check FIREBASE_CONFIG and database rules", e); }
+}
+function subscribeState(onChange){
+  stateRef.on("value", (snap)=>{
+    const val = snap.val();
+    if(val){ state = val; }
+    else { state = defaultState(); stateRef.set(state); }
+    onChange();
+  }, (err)=>{
+    console.error("Firebase read failed — check FIREBASE_CONFIG and database rules", err);
+  });
 }
 
 /* ============================= HELPERS ============================= */
@@ -619,6 +632,21 @@ function renderTV(){
   if(state.qPhase === "buzzed" && state.buzzTime){
     tickCountdown();
   }
+  if(state.phase === "final" && state.finalPhase === "timer" && state.finalTimerEnd){
+    tickFinalCountdown();
+  }
+}
+function tickFinalCountdown(){
+  const update = ()=>{
+    const remain = Math.max(0, Math.ceil((state.finalTimerEnd - Date.now())/1000));
+    const e = document.getElementById("finalCountdown");
+    if(e) e.textContent = remain;
+  };
+  update();
+  const iv = setInterval(()=>{
+    if(myRole!=="tv" || state.phase!=="final" || state.finalPhase!=="timer"){ clearInterval(iv); return; }
+    update();
+  }, 250);
 }
 function scoreboardHTML(){
   const aLead = state.scores.A > state.scores.B;
@@ -879,13 +907,17 @@ function bindPresenterEvents(){
 
 /* ============================= RENDER: TEAM ============================= */
 async function doBuzz(){
-  await loadState();
-  if(state.qPhase !== "hidden" || state.buzzTeam){ return; }
-  const s = {...state};
-  s.qPhase = "buzzed";
-  s.buzzTeam = myRole;
-  s.buzzTime = Date.now();
-  await saveState(s);
+  try{
+    await stateRef.transaction((s)=>{
+      if(!s) return s;                                    // no data yet, abort
+      if(s.qPhase !== "hidden" || s.buzzTeam) return;      // someone already buzzed, abort
+      s.qPhase = "buzzed";
+      s.buzzTeam = myRole;
+      s.buzzTime = Date.now();
+      s.updatedAt = Date.now();
+      return s;
+    });
+  }catch(e){ console.error("Buzz failed", e); }
 }
 function renderTeam(){
   const app = document.getElementById("app");
@@ -942,11 +974,7 @@ let loopStarted = false;
 function startLoop(){
   if(loopStarted) return;
   loopStarted = true;
-  render();
-  setInterval(async ()=>{
-    await loadState();
-    render();
-  }, 700);
+  subscribeState(render);   // fires immediately, then on every change, in real time
 }
 
 renderRolePicker();
