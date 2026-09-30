@@ -254,13 +254,13 @@ const ROUNDS = [
         {t:"Keeping the player calm / mental support", p:14},
         {t:"Raking bunkers", p:10},
       ]},
-    { text:"\ud83c\udfa5 Video cue: Jean van de Velde, final hole, 1999 Open. Name something that went wrong for him.",
+    { text:"Name a word used in golf that sounds like a mistake or an insult.",
       answers:[
-        {t:"Ball went into the water / Barry Burn", p:28},
-        {t:"Took his shoes and socks off", p:26},
-        {t:"Ended up in a bunker", p:20},
-        {t:"Made triple bogey, lost in playoff", p:18},
-        {t:"Wild tee shot into stands/rough", p:8},
+        {t:"Bogey", p:41},
+        {t:"Shank", p:28},
+        {t:"Slice", p:15},
+        {t:"Hook", p:11},
+        {t:"Mulligan", p:5},
       ]},
     { text:"Name a golfer who has won all four career Majors (\u201cCareer Grand Slam\u201d).",
       answers:[
@@ -284,13 +284,14 @@ const ROUNDS = [
 ];
 
 const FINAL = [
-  { text:"Name something you associate with tomorrow's course, Samanah Golf Course in Marrakech.",
+  { text:"What should you certainly not do, shortly before going on a golf trip to Marrakech?",
     answers:[
-      {t:"Designed by Jack Nicklaus / Nicklaus Design", p:30},
-      {t:"Mandatory caddy", p:25},
-      {t:"Backdrop of the Atlas Mountains", p:20},
-      {t:"First course in Africa to host a PGA Tour Champions event", p:15},
-      {t:"Par-72 championship layout, opened in 2009", p:10},
+      {t:"Fix your swing with Vincent Duysters", p:48},
+      {t:"Expect a kid within the month", p:24},
+      {t:"Binge YouTube for putting lessons", p:13},
+      {t:"Throw your back out during renovations", p:8},
+      {t:"Buy a new driver", p:5},
+      {t:"Watch a horror movie about water hazards", p:2},
     ]},
   { text:"Name something a golfer might blame for a bad shot (besides themselves).",
     answers:[
@@ -354,7 +355,10 @@ function defaultState(){
     pointsThisQ:0,
     scores:{A:0,B:0},
     finalPhase:"idle",      // idle | timer | entry | reveal | done
-    finalTimerEnd:null,
+    finalTimerTotalMs:50000,   // 50 seconds
+    finalTimerRemainingMs:50000,
+    finalTimerRunning:false,
+    finalTimerStartedAt:null,
     finalTeam:null,
     finalAnswers:{},        // {qIdx:{p1:idx|null,p2:idx|null}}
     finalRevealStep:0,      // 0..9
@@ -506,8 +510,35 @@ async function reassignPoints(team){
 async function startFinalTimer(){
   const s = {...state};
   s.finalPhase = "timer";
-  s.finalTimerEnd = Date.now() + 60000;
+  s.finalTimerTotalMs = 50000;
+  s.finalTimerRemainingMs = 50000;
+  s.finalTimerRunning = true;
+  s.finalTimerStartedAt = Date.now();
   await saveState(s);
+}
+async function pauseFinalTimer(){
+  const s = {...state};
+  if(s.finalTimerRunning){
+    const elapsed = Date.now() - s.finalTimerStartedAt;
+    s.finalTimerRemainingMs = Math.max(0, s.finalTimerRemainingMs - elapsed);
+    s.finalTimerRunning = false;
+    s.finalTimerStartedAt = null;
+    await saveState(s);
+  }
+}
+async function resumeFinalTimer(){
+  const s = {...state};
+  if(!s.finalTimerRunning && s.finalTimerRemainingMs > 0){
+    s.finalTimerRunning = true;
+    s.finalTimerStartedAt = Date.now();
+    await saveState(s);
+  }
+}
+function currentFinalRemainMs(){
+  if(state.finalTimerRunning && state.finalTimerStartedAt){
+    return Math.max(0, state.finalTimerRemainingMs - (Date.now() - state.finalTimerStartedAt));
+  }
+  return Math.max(0, state.finalTimerRemainingMs);
 }
 async function goToEntry(){
   const s = {...state};
@@ -633,9 +664,12 @@ function renderTV(){
     html += renderFinalTV();
   }
   else if(state.phase === "gameEnd"){
-    const winner = state.scores.A === state.scores.B ? "It's a tie!" :
-      (state.scores.A > state.scores.B ? "Team A wins!" : "Team B wins!");
-    html += `<div class="intro-screen"><h1>${esc(winner)}</h1></div>`;
+    const won = state.finalTotal >= 200;
+    const title = won ? `\ud83c\udfc6 Team ${state.finalTeam} wins the Mulligan!` : "No Mulligan this time";
+    const sub = won
+      ? `Fast Money total: ${state.finalTotal} points \u2014 over the 200 line!`
+      : `Team ${state.finalTeam} finished Fast Money on ${state.finalTotal} points \u2014 short of the 200 needed.`;
+    html += `<div class="intro-screen"><h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div></div>`;
     html += scoreboardHTML();
   }
 
@@ -645,15 +679,17 @@ function renderTV(){
   if(state.qPhase === "buzzed" && state.buzzTime){
     tickCountdown();
   }
-  if(state.phase === "final" && state.finalPhase === "timer" && state.finalTimerEnd){
+  if(state.phase === "final" && state.finalPhase === "timer"){
     tickFinalCountdown();
   }
 }
 function tickFinalCountdown(){
   const update = ()=>{
-    const remain = Math.max(0, Math.ceil((state.finalTimerEnd - Date.now())/1000));
+    const remain = Math.ceil(currentFinalRemainMs()/1000);
     const e = document.getElementById("finalCountdown");
     if(e) e.textContent = remain;
+    const p = document.getElementById("finalPausedTag");
+    if(p) p.style.display = state.finalTimerRunning ? "none" : "block";
   };
   update();
   const iv = setInterval(()=>{
@@ -715,9 +751,10 @@ function renderFinalTV(){
   let html = `<div class="round-tag">Fast Money Final \u2014 Team ${state.finalTeam}</div>`;
   if(state.finalPhase === "idle" || state.finalPhase==="timer"){
     if(state.finalPhase==="timer"){
-      html += `<div class="countdown-num" id="finalCountdown">60</div>`;
+      html += `<div class="countdown-num" id="finalCountdown">50</div>
+        <div id="finalPausedTag" style="display:none;color:var(--gold-bright);font-size:16px;letter-spacing:2px;">\u23f8 PAUSED</div>`;
     } else {
-      html += `<div class="q-title">Get ready&hellip;</div>`;
+      html += `<div class="q-title">Get ready&hellip; need 200 points to win the Mulligan</div>`;
     }
     html += `<div class="answer-grid">`;
     FINAL.forEach((q,i)=>{ html += `<div class="answer-row"><span><span class="num">${i+1}</span>${esc(q.text)}</span></div>`; });
@@ -742,10 +779,14 @@ function renderFinalTV(){
       }
     });
     html += `</div>`;
-    html += `<div class="q-title">Total: ${state.finalTotal}</div>`;
-    if(state.finalPhase==="done" && state.finalTotal > 200){
-      html += `<div class="q-title" style="color:var(--gold-bright);">\ud83c\udfc6 OVER 200 \u2014 CELEBRATION! \ud83c\udfc6</div>`;
-      launchConfetti();
+    html += `<div class="q-title">Total: ${state.finalTotal} / 200 needed</div>`;
+    if(state.finalPhase==="done"){
+      if(state.finalTotal >= 200){
+        html += `<div class="q-title" style="color:var(--gold-bright);">\ud83c\udfc6 200+ \u2014 THEY WIN THE MULLIGAN! \ud83c\udfc6</div>`;
+        launchConfetti();
+      } else {
+        html += `<div class="q-title" style="color:var(--cream);">Short of 200 \u2014 no Mulligan this time.</div>`;
+      }
     }
   }
   return html;
@@ -771,11 +812,25 @@ function launchConfetti(){
 /* ============================= RENDER: PRESENTER ============================= */
 let selectedAnswerIdx = null;
 let lastSelectionContext = null;
+let presenterTickInterval = null;
 function maybeResetSelection(){
   const ctx = state.roundIndex + "-" + state.questionIndex + "-" + state.qPhase;
   if(ctx !== lastSelectionContext){
     selectedAnswerIdx = null;
     lastSelectionContext = ctx;
+  }
+}
+function maybeTickPresenterTimer(){
+  const shouldTick = (myRole==="presenter" && state.phase==="final" && state.finalPhase==="timer");
+  if(shouldTick && !presenterTickInterval){
+    presenterTickInterval = setInterval(()=>{
+      if(myRole!=="presenter" || state.phase!=="final" || state.finalPhase!=="timer"){
+        clearInterval(presenterTickInterval); presenterTickInterval = null; return;
+      }
+      render();
+    }, 500);
+  } else if(!shouldTick && presenterTickInterval){
+    clearInterval(presenterTickInterval); presenterTickInterval = null;
   }
 }
 function renderPresenter(){
@@ -868,16 +923,25 @@ function renderPresenter(){
   html += `</div>`;
   app.innerHTML = html;
   bindPresenterEvents();
+  maybeTickPresenterTimer();
 }
 
 function renderFinalPresenter(){
-  let html = `<div class="p-section"><p>Fast Money team: <strong>Team ${state.finalTeam}</strong> (led after 3 rounds)</p>`;
+  let html = `<div class="p-section"><p>Fast Money team: <strong>Team ${state.finalTeam}</strong> (led after 3 rounds) &middot; needs 200+ points to win the Mulligan</p>`;
   if(state.finalPhase === "idle"){
-    html += `<button class="btn" data-action="startFinalTimer">Start 60-second timer</button>`;
+    html += `<button class="btn" data-action="startFinalTimer">Start 50-second timer</button>`;
   }
   if(state.finalPhase === "timer"){
-    html += `<p class="muted">Timer running. Both players give their 5 answers verbally \u2014 don't touch anything else. Move on whenever they're done.</p>`;
-    html += `<button class="btn" data-action="goToEntry">Go to answer entry \u2192</button>`;
+    const secsLeft = Math.ceil(currentFinalRemainMs()/1000);
+    html += `<p class="muted">${state.finalTimerRunning ? 'Timer running' : 'Timer paused'} \u2014 ${secsLeft}s left. Both players give their 5 answers verbally \u2014 pause any time, then move to entry whenever they're done.</p>`;
+    html += `<div class="p-row">`;
+    if(state.finalTimerRunning){
+      html += `<button class="btn" data-action="pauseTimer">\u23f8 Pause timer</button>`;
+    } else {
+      html += `<button class="btn" data-action="resumeTimer" ${secsLeft<=0?'disabled':''}>\u25b6 Resume timer</button>`;
+    }
+    html += `<button class="btn secondary" data-action="goToEntry">Go to answer entry \u2192</button>`;
+    html += `</div>`;
   }
   if(state.finalPhase === "entry"){
     html += `<p class="muted">Pick the closest match for each answer given (or "No match").</p>`;
@@ -896,11 +960,12 @@ function renderFinalPresenter(){
   }
   if(state.finalPhase === "reveal"){
     const total = revealSlots().length;
-    html += `<p>Revealed ${state.finalRevealStep} of ${total}. Running total: ${state.finalTotal}</p>`;
+    html += `<p>Revealed ${state.finalRevealStep} of ${total}. Running total: ${state.finalTotal} / 200 needed</p>`;
     html += `<button class="btn" data-action="revealNext">Reveal next answer</button>`;
   }
   if(state.finalPhase === "done"){
-    html += `<p>Final total: <strong>${state.finalTotal}</strong>${state.finalTotal>200 ? ' \u2014 over 200! \ud83c\udfc6':''}</p>
+    const won = state.finalTotal >= 200;
+    html += `<p>Final total: <strong>${state.finalTotal}</strong> \u2014 ${won ? 'Team '+state.finalTeam+' wins the Mulligan! \ud83c\udfc6' : 'short of 200, no Mulligan.'}</p>
       <button class="btn" data-action="endGame">Show winner screen</button>`;
   }
   html += `</div>`;
@@ -928,6 +993,8 @@ function bindPresenterEvents(){
       else if(action==="nextQuestion") await nextQuestion();
       else if(action==="startNextRound") await startNextRound();
       else if(action==="startFinalTimer") await startFinalTimer();
+      else if(action==="pauseTimer") await pauseFinalTimer();
+      else if(action==="resumeTimer") await resumeFinalTimer();
       else if(action==="goToEntry") await goToEntry();
       else if(action==="startReveal") await startReveal();
       else if(action==="revealNext") await revealNext();
