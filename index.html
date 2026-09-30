@@ -113,6 +113,7 @@
   }
   .p-answer-btn:hover{background:#175038;}
   .p-answer-btn.done{opacity:0.35; cursor:default; text-decoration:line-through;}
+  .p-answer-btn.selected{background:var(--gold); color:#1a2a20; border-color:var(--gold-bright); font-weight:700;}
   .p-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
   .team-choice-btn{flex:1; min-width:140px; padding:16px; font-size:16px;}
   .team-choice-btn.A{background:var(--blue-team); color:#fff;}
@@ -365,6 +366,18 @@ function defaultState(){
 let state = defaultState();
 let myRole = null; // 'tv' | 'presenter' | 'A' | 'B'
 
+// Firebase Realtime Database silently deletes empty arrays/objects on write
+// (e.g. revealed:[] or finalAnswers:{} come back as `undefined`, not []/{} ).
+// hydrate() patches any such gaps back in after every read, so the rest of
+// the app can safely assume these fields always exist.
+function hydrate(val){
+  return Object.assign({}, defaultState(), val, {
+    revealed: Array.isArray(val.revealed) ? val.revealed : [],
+    scores: Object.assign({A:0,B:0}, val.scores || {}),
+    finalAnswers: val.finalAnswers || {},
+  });
+}
+
 async function saveState(s){
   s.updatedAt = Date.now();
   state = s;
@@ -374,7 +387,7 @@ async function saveState(s){
 function subscribeState(onChange){
   stateRef.on("value", (snap)=>{
     const val = snap.val();
-    if(val){ state = val; }
+    if(val){ state = hydrate(val); }
     else { state = defaultState(); stateRef.set(state); }
     onChange();
   }, (err)=>{
@@ -578,7 +591,7 @@ function renderTV(){
         <div class="sub">2 teams of 5 &middot; 3 rounds &middot; Fast Money final</div>
         <div class="prize-box">
           <div style="font-size:15px;letter-spacing:1px;color:#bcd3c6;margin-bottom:8px;">TODAY'S PRIZE</div>
-          <div style="font-family:Georgia,serif;font-size:28px;color:var(--gold-bright);">Bragging rights + a round at Samanah Golf Course</div>
+          <div style="font-family:Georgia,serif;font-size:28px;color:var(--gold-bright);">Bragging rights + One Mulligan</div>
         </div>
       </div>`;
   }
@@ -756,7 +769,17 @@ function launchConfetti(){
 }
 
 /* ============================= RENDER: PRESENTER ============================= */
+let selectedAnswerIdx = null;
+let lastSelectionContext = null;
+function maybeResetSelection(){
+  const ctx = state.roundIndex + "-" + state.questionIndex + "-" + state.qPhase;
+  if(ctx !== lastSelectionContext){
+    selectedAnswerIdx = null;
+    lastSelectionContext = ctx;
+  }
+}
 function renderPresenter(){
+  maybeResetSelection();
   const app = document.getElementById("app");
   let html = `<div class="presenter"><h2>\u26f3 Presenter Console</h2>`;
 
@@ -774,25 +797,33 @@ function renderPresenter(){
       html += `<p class="muted">Waiting for a team to buzz in on their phone.</p>`;
     }
     if(state.qPhase === "buzzed"){
-      html += `<p><strong>Team ${state.buzzTeam} buzzed.</strong> Did they say a correct answer?</p>`;
+      html += `<p><strong>Team ${state.buzzTeam} buzzed.</strong> Click the answer they gave, then Validate — or Wrong buzz if they didn't answer in time / said nothing on the board.</p>`;
       html += `<div class="p-answers-list">`;
       q.answers.forEach((a,i)=>{
-        html += `<div class="p-answer-btn" data-action="correctInitial" data-idx="${i}">
+        const sel = selectedAnswerIdx === i;
+        html += `<div class="p-answer-btn ${sel?'selected':''}" data-select="${i}">
           <span>${esc(a.t)}</span><span class="pts">+${a.p*round.multiplier}</span></div>`;
       });
       html += `</div>`;
-      html += `<button class="btn danger" data-action="wrongInitial">\u2716 Wrong buzz</button>`;
+      html += `<div class="p-row">
+        <button class="btn" data-action="validateInitial" ${selectedAnswerIdx===null?'disabled':''}>\u2713 Validate answer</button>
+        <button class="btn danger" data-action="wrongInitial">\u2716 Wrong buzz</button>
+      </div>`;
     }
     if(state.qPhase === "playing"){
       html += `<p><strong>Team ${state.controllingTeam}</strong> is answering. Strikes: ${state.strikes}/3</p>`;
       html += `<div class="p-answers-list">`;
       q.answers.forEach((a,i)=>{
         const done = state.revealed.includes(i);
-        html += `<div class="p-answer-btn ${done?'done':''}" ${done?'':`data-action="correctPlaying" data-idx="${i}"`}>
+        const sel = selectedAnswerIdx === i;
+        html += `<div class="p-answer-btn ${done?'done':(sel?'selected':'')}" ${done?'':`data-select="${i}"`}>
           <span>${esc(a.t)}</span><span class="pts">${done?'\u2713':'+'+(a.p*round.multiplier)}</span></div>`;
       });
       html += `</div>`;
-      html += `<button class="btn danger" data-action="wrongPlaying">\u2716 Wrong answer (strike)</button>`;
+      html += `<div class="p-row">
+        <button class="btn" data-action="validatePlaying" ${selectedAnswerIdx===null?'disabled':''}>\u2713 Validate answer</button>
+        <button class="btn danger" data-action="wrongPlaying">\u2716 Wrong answer (strike)</button>
+      </div>`;
     }
     if(state.qPhase === "steal"){
       html += `<p><strong>Team ${opposite(state.controllingTeam)}</strong> gets ONE steal attempt. Current pot: ${state.pointsThisQ} pts</p>`;
@@ -800,12 +831,16 @@ function renderPresenter(){
       q.answers.forEach((a,i)=>{
         const done = state.revealed.includes(i);
         if(!done){
-          html += `<div class="p-answer-btn" data-action="stealCorrect" data-idx="${i}">
+          const sel = selectedAnswerIdx === i;
+          html += `<div class="p-answer-btn ${sel?'selected':''}" data-select="${i}">
             <span>${esc(a.t)}</span><span class="pts">+${a.p*round.multiplier}</span></div>`;
         }
       });
       html += `</div>`;
-      html += `<button class="btn danger" data-action="stealFailed">\u2716 Steal failed</button>`;
+      html += `<div class="p-row">
+        <button class="btn" data-action="validateSteal" ${selectedAnswerIdx===null?'disabled':''}>\u2713 Validate steal</button>
+        <button class="btn danger" data-action="stealFailed">\u2716 Steal failed</button>
+      </div>`;
     }
     if(state.qPhase === "qdone"){
       html += `<p><strong>Team ${state.awardedTeam}</strong> was awarded ${state.pointsThisQ} points.</p>`;
@@ -874,16 +909,21 @@ function renderFinalPresenter(){
 
 function bindPresenterEvents(){
   document.getElementById("startGameBtn") && document.getElementById("startGameBtn").addEventListener("click", startGame);
+  document.querySelectorAll("[data-select]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      selectedAnswerIdx = parseInt(el.dataset.select);
+      render();   // local-only re-render to show the highlight; nothing saved yet
+    });
+  });
   document.querySelectorAll("[data-action]").forEach(el=>{
     el.addEventListener("click", async ()=>{
       const action = el.dataset.action;
-      const idx = el.dataset.idx !== undefined ? parseInt(el.dataset.idx) : null;
-      if(action==="correctInitial") await markCorrectInitial(idx);
-      else if(action==="wrongInitial") await markWrongInitial();
-      else if(action==="correctPlaying") await markCorrectPlaying(idx);
-      else if(action==="wrongPlaying") await markWrongPlaying();
-      else if(action==="stealCorrect") await stealCorrect(idx);
-      else if(action==="stealFailed") await stealFailed();
+      if(action==="validateInitial"){ if(selectedAnswerIdx===null) return; await markCorrectInitial(selectedAnswerIdx); selectedAnswerIdx=null; }
+      else if(action==="wrongInitial"){ await markWrongInitial(); selectedAnswerIdx=null; }
+      else if(action==="validatePlaying"){ if(selectedAnswerIdx===null) return; await markCorrectPlaying(selectedAnswerIdx); selectedAnswerIdx=null; }
+      else if(action==="wrongPlaying"){ await markWrongPlaying(); selectedAnswerIdx=null; }
+      else if(action==="validateSteal"){ if(selectedAnswerIdx===null) return; await stealCorrect(selectedAnswerIdx); selectedAnswerIdx=null; }
+      else if(action==="stealFailed"){ await stealFailed(); selectedAnswerIdx=null; }
       else if(action==="reassign") await reassignPoints(el.dataset.team);
       else if(action==="nextQuestion") await nextQuestion();
       else if(action==="startNextRound") await startNextRound();
