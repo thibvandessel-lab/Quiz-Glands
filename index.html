@@ -6,6 +6,13 @@
 <title>Golf Feud</title>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script>
+/* Fallback: if the Google CDN was blocked/failed, try jsDelivr */
+if(!(window.firebase && window.firebase.database)){
+  document.write('<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"><\/script>');
+  document.write('<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-database-compat.js"><\/script>');
+}
+</script>
 <style>
   :root{
     --board-green:#0b3d2e;
@@ -337,6 +344,13 @@ const FIREBASE_CONFIG = {
   databaseURL: "https://glands-quiz-2026-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "glands-quiz-2026",
 };
+if(typeof firebase === "undefined" || !firebase.database){
+  document.getElementById("app").innerHTML =
+    '<div style="padding:40px;max-width:560px;margin:auto;text-align:center;font-family:sans-serif;">' +
+    '<h2 style="color:#f2cf5b;">Could not load the Firebase library</h2>' +
+    '<p>The page could not download the Firebase scripts. Check your internet connection, disable ad/content blockers for this site, and make sure the first lines of index.html (the two &lt;script src=...firebase...&gt; lines in the &lt;head&gt;) were not lost when you pasted the file.</p></div>';
+  throw new Error("Firebase SDK failed to load");
+}
 firebase.initializeApp(FIREBASE_CONFIG);
 const stateRef = firebase.database().ref("golf_feud_state");
 
@@ -1093,7 +1107,7 @@ function renderTeam(){
 /* ============================= MAIN LOOP ============================= */
 function render(){
   if(myRole === "tv") renderTV();
-  else if(myRole === "presenter") renderPresenter();
+  else if(myRole === "presenter") renderPresenter();Microsoft Teams
   else if(myRole === "A" || myRole === "B") renderTeam();
 }
 
