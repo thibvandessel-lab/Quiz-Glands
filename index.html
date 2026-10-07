@@ -210,7 +210,7 @@ const ROUNDS = [
         {t:"Line up the putt / read the green", p:24},
         {t:"Check the wind", p:22},
         {t:"Waggle the club", p:14},
-        {t:"Take a divot test", p:10},
+        {t:"Panic", p:10},
       ]},
     { text:"Name a reason a golfer might get a penalty stroke.",
       answers:[
@@ -218,14 +218,14 @@ const ROUNDS = [
         {t:"Out of bounds", p:28},
         {t:"Lost ball", p:20},
         {t:"Unplayable lie", p:12},
-        {t:"Slow play", p:10},
+        {t:"Playing someone else's ball", p:10},
       ]},
     { text:"Name a nickname of a famous golfer.",
       answers:[
         {t:"\u201cThe Golden Bear\u201d (Jack Nicklaus)", p:30},
         {t:"\u201cTiger\u201d (Eldrick Woods)", p:26},
         {t:"\u201cThe King\u201d (Arnold Palmer)", p:20},
-        {t:"\u201cThe Shark\u201d (Greg Norman)", p:14},
+        {t:"Nicolas \u201cThe Belgian Bomber\u201d Colsaerts", p:14},
         {t:"\u201cRors\u201d / \u201cRory\u201d (McIlroy)", p:10},
       ]},
     { text:"According to the Rules of Golf, name a situation where a player gets free relief (no penalty).",
@@ -240,7 +240,7 @@ const ROUNDS = [
   { name:"Round 3", multiplier:3, questions:[
     { text:"What are the 5 cheapest golf ball brands?",
       answers:[
-        {t:"Nitro", p:32},
+        {t:"Top-Flite", p:32},
         {t:"Wilson", p:24},
         {t:"Kirkland Signature", p:20},
         {t:"Callaway", p:14},
@@ -254,13 +254,14 @@ const ROUNDS = [
         {t:"Keeping the player calm / mental support", p:14},
         {t:"Raking bunkers", p:10},
       ]},
-    { text:"Name a word used in golf that sounds like a mistake or an insult.",
+    { text:"What do spectators typically yell after a player has hit the ball?",
       answers:[
-        {t:"Bogey", p:41},
-        {t:"Shank", p:28},
-        {t:"Slice", p:15},
-        {t:"Hook", p:11},
-        {t:"Mulligan", p:5},
+        {t:"Get in the hole", p:35},
+        {t:"Get in the bunker", p:20},
+        {t:"Light the candle", p:18},
+        {t:"Mashed Potatoes", p:15},
+        {t:"Give me back my son", p:9},
+        {t:"10 points Griffondor", p:3},
       ]},
     { text:"Name a golfer who has won all four career Majors (\u201cCareer Grand Slam\u201d).",
       answers:[
@@ -388,14 +389,33 @@ async function saveState(s){
   try{ await stateRef.set(s); }
   catch(e){ console.error("Firebase write failed — check FIREBASE_CONFIG and database rules", e); }
 }
+function showConnBanner(msg){
+  let b = document.getElementById("connBanner");
+  if(!msg){ if(b) b.remove(); return; }
+  if(!b){
+    b = document.createElement("div");
+    b.id = "connBanner";
+    b.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:2000;background:#b3312c;color:#fff;padding:12px 16px;font-size:14px;text-align:center;";
+    document.body.appendChild(b);
+  }
+  b.textContent = msg;
+}
+let gotFirstSnapshot = false;
 function subscribeState(onChange){
+  showConnBanner("Connecting to the game database\u2026");
+  setTimeout(()=>{
+    if(!gotFirstSnapshot) showConnBanner("Still can't reach the game database. Check the Firebase rules (they may have expired) and your internet connection.");
+  }, 6000);
   stateRef.on("value", (snap)=>{
+    gotFirstSnapshot = true;
+    showConnBanner(null);
     const val = snap.val();
     if(val){ state = hydrate(val); }
     else { state = defaultState(); stateRef.set(state); }
     onChange();
   }, (err)=>{
     console.error("Firebase read failed — check FIREBASE_CONFIG and database rules", err);
+    showConnBanner("Database access refused: " + (err && err.code ? err.code : "unknown error") + ". Check the Firebase rules (test mode expires after 30 days).");
   });
 }
 
@@ -1081,6 +1101,7 @@ let loopStarted = false;
 function startLoop(){
   if(loopStarted) return;
   loopStarted = true;
+  render();               // show the screen right away, using defaults until data arrives
   subscribeState(render);   // fires immediately, then on every change, in real time
 }
 
