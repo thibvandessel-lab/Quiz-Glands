@@ -339,10 +339,13 @@ const FINAL = [
 /* Paste your own project's config here — see the setup guide. Everything
    under "firebaseConfig" comes straight from the Firebase console. */
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC3QuRMNVgxAA0gNBiWHvJUZpvOC9KruXE",
-  authDomain: "glands-quiz-2026.firebaseapp.com",
-  databaseURL: "https://glands-quiz-2026-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "glands-quiz-2026",
+  apiKey: "AIzaSyAxMlygRFpldMX73PW6KZw-oVhsiVD3Qys",
+  authDomain: "quiz-glands-2026.firebaseapp.com",
+  databaseURL: "https://quiz-glands-2026-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "quiz-glands-2026",
+  storageBucket: "quiz-glands-2026.firebasestorage.app",
+  messagingSenderId: "353585831215",
+  appId: "1:353585831215:web:304afa991f1edad6ba95da",
 };
 if(typeof firebase === "undefined" || !firebase.database){
   document.getElementById("app").innerHTML =
@@ -415,10 +418,20 @@ function showConnBanner(msg){
   b.textContent = msg;
 }
 let gotFirstSnapshot = false;
+let lastDbError = null;
+let dbConnected = false;
 function subscribeState(onChange){
   showConnBanner("Connecting to the game database\u2026");
+  firebase.database().ref(".info/connected").on("value", (snap)=>{ dbConnected = snap.val() === true; });
   setTimeout(()=>{
-    if(!gotFirstSnapshot) showConnBanner("Still can't reach the game database. Check the Firebase rules (they may have expired) and your internet connection.");
+    if(gotFirstSnapshot) return;
+    if(lastDbError){
+      showConnBanner("Database refused access (" + (lastDbError.code || lastDbError.message || "unknown") + "). Fix: Firebase console > Realtime Database > Rules > set .read and .write to true > Publish.");
+    } else if(!dbConnected){
+      showConnBanner("Cannot reach the database server at all. Check that the Realtime Database exists in Firebase, that databaseURL in the file matches it exactly, and that this network/browser allows it (try mobile data, disable blockers).");
+    } else {
+      showConnBanner("Connected, but no data came back. Check the Firebase rules and try reloading.");
+    }
   }, 6000);
   stateRef.on("value", (snap)=>{
     gotFirstSnapshot = true;
@@ -428,8 +441,9 @@ function subscribeState(onChange){
     else { state = defaultState(); stateRef.set(state); }
     onChange();
   }, (err)=>{
-    console.error("Firebase read failed — check FIREBASE_CONFIG and database rules", err);
-    showConnBanner("Database access refused: " + (err && err.code ? err.code : "unknown error") + ". Check the Firebase rules (test mode expires after 30 days).");
+    lastDbError = err;
+    console.error("Firebase read failed", err);
+    showConnBanner("Database refused access (" + (err && err.code ? err.code : "unknown") + "). Fix: Firebase console > Realtime Database > Rules > set .read and .write to true > Publish.");
   });
 }
 
@@ -1107,7 +1121,7 @@ function renderTeam(){
 /* ============================= MAIN LOOP ============================= */
 function render(){
   if(myRole === "tv") renderTV();
-  else if(myRole === "presenter") renderPresenter();Microsoft Teams
+  else if(myRole === "presenter") renderPresenter();
   else if(myRole === "A" || myRole === "B") renderTeam();
 }
 
